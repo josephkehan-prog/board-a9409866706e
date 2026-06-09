@@ -1,8 +1,8 @@
 <!DOCTYPE html><script type="application/json" id="cowork-artifact-meta">
 {
-  "name": "Jhan Email Kanban",
+  "name": "Jhan Workflow Dashboard",
   "schemaVersion": 1,
-  "description": "Kanban board of tasks extracted from Outlook mail. Tasks and statuses are stored in Supabase behind a real login (Supabase Auth) — no task data is baked into this HTML, so it is safe to host on a public URL. Three columns: To Do, Completed, Not for Me.",
+  "description": "Login-gated personal work dashboard (Supabase Auth + RLS). Overview home plus Board (email task kanban with source-email attachments), Weekly schedule, Observations tracker, and Meeting agenda. No data is baked into this HTML — safe on a public URL.",
   "mcpTools": [],
   "mcpServerNames": []
 }
@@ -11,198 +11,144 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>Email Task Board</title>
+<title>Workflow Dashboard</title>
 <style>
-:root { color-scheme: light; }
+:root { color-scheme: light; --indigo:#6366f1; }
 * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  background: #f0f2f5;
-  color: #111;
-  min-height: 100vh;
-  padding: max(16px, env(safe-area-inset-top)) clamp(12px, 3vw, 24px) 48px;
+  background: #f0f2f5; color: #111; min-height: 100vh;
+  padding: max(12px, env(safe-area-inset-top)) clamp(12px,3vw,24px) 48px;
 }
-header { margin-bottom: 14px; }
-header h1 { font-size: clamp(0.98rem, 2.6vw, 1.12rem); font-weight: 700; color: #1a1a1a; line-height: 1.3; }
-header .meta { font-size: 0.76rem; color: #888; margin-top: 4px; }
-.signout { color: #6366f1; text-decoration: none; font-weight: 600; }
-.signout:hover { text-decoration: underline; }
+.muted { color: #9aa0aa; font-size: 0.82rem; }
+b { font-weight: 700; }
 
 /* Login */
-#login {
-  position: fixed; inset: 0; z-index: 1000;
-  background: #f0f2f5;
-  display: flex; align-items: center; justify-content: center;
-  padding: 20px;
-}
-.login-box {
-  background: #fff; border-radius: 14px; padding: 28px 26px;
-  box-shadow: 0 6px 24px rgba(0,0,0,0.10);
-  width: 100%; max-width: 340px; text-align: center;
-  display: flex; flex-direction: column;
-}
-.login-title { font-size: 1.15rem; font-weight: 700; margin-bottom: 4px; }
-.login-sub { font-size: 0.82rem; color: #888; margin-bottom: 18px; }
-.login-box input {
-  width: 100%; font-size: 1rem; padding: 11px 12px;
-  border: 1px solid #d8dadf; border-radius: 9px; outline: none; margin-bottom: 10px;
-}
-.login-box input:focus { border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,0.15); }
-.login-btn {
-  width: 100%; font-size: 0.95rem; font-weight: 600; padding: 11px;
-  border: none; border-radius: 9px; background: #6366f1; color: #fff; cursor: pointer; margin-top: 2px;
-}
-.login-btn:active { transform: scale(0.98); }
-.login-btn:disabled { opacity: 0.6; cursor: default; }
-.login-error { display: none; color: #dc2626; font-size: 0.8rem; margin-top: 12px; }
+#login { position: fixed; inset: 0; z-index: 1000; background: #f0f2f5; display: flex; align-items: center; justify-content: center; padding: 20px; }
+.login-box { background:#fff; border-radius:14px; padding:28px 26px; box-shadow:0 6px 24px rgba(0,0,0,0.10); width:100%; max-width:340px; text-align:center; display:flex; flex-direction:column; }
+.login-title { font-size:1.15rem; font-weight:700; margin-bottom:4px; }
+.login-sub { font-size:0.82rem; color:#888; margin-bottom:18px; }
+.login-box input { width:100%; font-size:1rem; padding:11px 12px; border:1px solid #d8dadf; border-radius:9px; outline:none; margin-bottom:10px; }
+.login-box input:focus { border-color:var(--indigo); box-shadow:0 0 0 3px rgba(99,102,241,0.15); }
+.login-btn { width:100%; font-size:0.95rem; font-weight:600; padding:11px; border:none; border-radius:9px; background:var(--indigo); color:#fff; cursor:pointer; }
+.login-btn:active { transform:scale(0.98); } .login-btn:disabled { opacity:0.6; }
+.login-error { display:none; color:#dc2626; font-size:0.8rem; margin-top:12px; }
 
-/* Search / filter */
-.toolbar { margin: 10px 0 16px; }
-#search {
-  width: 100%;
-  max-width: 420px;
-  font-size: 0.9rem;
-  padding: 9px 12px;
-  border: 1px solid #d8dadf;
-  border-radius: 9px;
-  background: #fff;
-  color: #111;
-  outline: none;
-}
-#search:focus { border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,0.15); }
-#search::placeholder { color: #aab; }
+/* App bar */
+.appbar { display:flex; align-items:center; gap:12px; margin-bottom:16px; flex-wrap:wrap; }
+.brand { font-size:1.05rem; font-weight:800; white-space:nowrap; }
+.nav { display:flex; gap:4px; overflow-x:auto; flex:1; -webkit-overflow-scrolling:touch; }
+.nav button { font-size:0.82rem; font-weight:600; padding:7px 12px; border:1px solid transparent; border-radius:8px; background:transparent; color:#555; cursor:pointer; white-space:nowrap; }
+.nav button:hover { background:#e7e9ee; }
+.nav button.active { background:#fff; color:var(--indigo); box-shadow:0 1px 3px rgba(0,0,0,0.08); }
+.signout { color:var(--indigo); text-decoration:none; font-weight:600; font-size:0.8rem; white-space:nowrap; }
+.signout:hover { text-decoration:underline; }
 
-.board {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(255px, 1fr));
-  gap: 14px;
-  align-items: start;
-}
-.col {
-  background: #e4e6ea;
-  border-radius: 12px;
-  padding: 12px;
-  min-height: 140px;
-  transition: outline 0.1s, background 0.1s;
-}
-.col.drop-over { outline: 2px dashed #6366f1; outline-offset: -2px; background: #dde0e6; }
-.col-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 11px;
-  font-size: 0.76rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-}
-.badge {
-  border-radius: 99px;
-  padding: 2px 8px;
-  font-size: 0.7rem;
-  font-weight: 600;
-}
-#col-todo .col-header     { color: #1d4ed8; }
-#col-todo .badge          { background: #dbeafe; color: #1d4ed8; }
-#col-completed .col-header{ color: #065f46; }
-#col-completed .badge     { background: #d1fae5; color: #065f46; }
-#col-notforme .col-header { color: #92400e; }
-#col-notforme .badge      { background: #fef3c7; color: #92400e; }
+/* Overview */
+.ov-greet { font-size:1.0rem; font-weight:700; margin-bottom:14px; color:#333; }
+.cards-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:14px; }
+.ov-card { background:#fff; border-radius:13px; padding:16px 16px 14px; box-shadow:0 1px 3px rgba(0,0,0,0.07); cursor:pointer; transition:box-shadow .15s; }
+.ov-card:hover { box-shadow:0 4px 14px rgba(0,0,0,0.10); }
+.ov-card h3 { font-size:0.92rem; font-weight:700; margin-bottom:11px; display:flex; align-items:center; gap:8px; }
+.pill { font-size:0.72rem; font-weight:700; background:#eef0f4; color:#666; border-radius:99px; padding:2px 9px; }
+.pill.ok { background:#d1fae5; color:#065f46; }
+.ov-line { font-size:0.83rem; padding:5px 0; border-top:1px solid #f1f2f4; display:flex; gap:8px; align-items:baseline; }
+.ov-line:first-of-type { border-top:none; }
+.ov-time { color:#888; font-size:0.74rem; min-width:46px; }
+.kind-tag { width:8px; height:8px; border-radius:99px; flex:none; margin-top:5px; }
+.stat-row { display:flex; align-items:center; gap:8px; font-size:0.86rem; padding:5px 0; }
+.stat-row b { margin-left:auto; }
+.dot { width:9px; height:9px; border-radius:99px; } .dot.todo{background:#3b82f6;} .dot.done{background:#10b981;} .dot.nfm{background:#f59e0b;}
+.due-chip { background:#eef2ff; color:#4338ca; border-radius:5px; padding:1px 6px; font-size:0.7rem; font-weight:600; }
+.due-chip.overdue { background:#fee2e2; color:#b91c1c; }
 
-.card {
-  background: white;
-  border-radius: 8px;
-  padding: 11px 12px;
-  margin-bottom: 9px;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.08);
-  transition: box-shadow 0.15s, opacity 0.15s;
-}
-@media (hover: hover) { .card { cursor: grab; } .card:hover { box-shadow: 0 3px 10px rgba(0,0,0,0.12); } }
-.card.dragging { opacity: 0.4; cursor: grabbing; }
+/* Board */
+.toolbar { margin: 4px 0 16px; }
+#search { width:100%; max-width:420px; font-size:0.9rem; padding:9px 12px; border:1px solid #d8dadf; border-radius:9px; background:#fff; outline:none; }
+#search:focus { border-color:var(--indigo); box-shadow:0 0 0 3px rgba(99,102,241,0.15); }
+.board { display:grid; grid-template-columns:repeat(auto-fit,minmax(255px,1fr)); gap:14px; align-items:start; }
+.col { background:#e4e6ea; border-radius:12px; padding:12px; min-height:140px; transition:outline .1s,background .1s; }
+.col.drop-over { outline:2px dashed var(--indigo); outline-offset:-2px; background:#dde0e6; }
+.col-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:11px; font-size:0.76rem; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; }
+.badge { border-radius:99px; padding:2px 8px; font-size:0.7rem; font-weight:600; }
+#col-todo .col-header{color:#1d4ed8;} #col-todo .badge{background:#dbeafe;color:#1d4ed8;}
+#col-completed .col-header{color:#065f46;} #col-completed .badge{background:#d1fae5;color:#065f46;}
+#col-notforme .col-header{color:#92400e;} #col-notforme .badge{background:#fef3c7;color:#92400e;}
+.card { position:relative; background:#fff; border-radius:8px; padding:11px 12px; margin-bottom:9px; box-shadow:0 1px 2px rgba(0,0,0,0.08); transition:box-shadow .15s,opacity .15s; }
+.card.pinned { box-shadow:0 0 0 2px #fcd34d, 0 1px 2px rgba(0,0,0,0.08); }
+@media (hover:hover){ .card{cursor:grab;} .card:hover{box-shadow:0 3px 10px rgba(0,0,0,0.12);} }
+.card.dragging { opacity:0.4; cursor:grabbing; }
+.card-top { position:absolute; top:7px; right:8px; }
+.pin { border:none; background:transparent; cursor:pointer; font-size:0.85rem; opacity:0.3; filter:grayscale(1); }
+.pin.on { opacity:1; filter:none; }
+.card-title { font-size:0.85rem; font-weight:500; line-height:1.45; margin-bottom:7px; padding-right:18px; }
+.card-meta { display:flex; gap:8px; align-items:center; flex-wrap:wrap; font-size:0.71rem; color:#999; margin-bottom:7px; }
+.age-chip { background:#f3f4f6; border-radius:4px; padding:1px 6px; color:#555; font-weight:500; }
+.due-set { display:inline-flex; align-items:center; gap:4px; font-size:0.7rem; color:#888; margin-bottom:7px; }
+.due-set input { font-size:0.7rem; border:1px solid #e3e4e8; border-radius:5px; padding:2px 4px; }
+.prompt-toggle { font-size:0.72rem; color:var(--indigo); cursor:pointer; user-select:none; margin-bottom:5px; display:inline-block; padding:3px 8px 3px 0; }
+.prompt-body { display:none; background:#fafafa; border-left:3px solid #818cf8; border-radius:0 5px 5px 0; padding:7px 9px; font-size:0.69rem; font-family:'Menlo','Consolas',monospace; color:#3c3c3c; line-height:1.5; white-space:pre-wrap; margin-bottom:8px; max-height:200px; overflow-y:auto; }
+.email-body { border-left-color:#34d399; }
+.email-body a { color:var(--indigo); font-family:inherit; }
+.card-actions { display:flex; gap:6px; flex-wrap:wrap; }
+.btn { font-size:0.72rem; padding:6px 10px; min-height:34px; border-radius:6px; border:1px solid #e0e0e0; background:#fff; cursor:pointer; color:#555; white-space:nowrap; touch-action:manipulation; }
+.btn:active { transform:scale(0.97); }
+@media (hover:hover){ .btn:hover{background:#f5f5f5;} }
+.btn-todo{border-color:#93c5fd;color:#1d4ed8;} .btn-done{border-color:#6ee7b7;color:#065f46;} .btn-nfm{border-color:#fcd34d;color:#92400e;} .btn-copy{border-color:#c4b5fd;color:#5b21b6;}
+.btn-copy.copied { background:#ede9fe; }
+.empty { color:#b3b6bd; font-size:0.78rem; text-align:center; padding:24px 0; }
 
-.card-title {
-  font-size: 0.85rem;
-  font-weight: 500;
-  line-height: 1.45;
-  color: #111;
-  margin-bottom: 7px;
-}
-.card-meta {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  flex-wrap: wrap;
-  font-size: 0.71rem;
-  color: #999;
-  margin-bottom: 8px;
-}
-.age-chip {
-  background: #f3f4f6;
-  border-radius: 4px;
-  padding: 1px 6px;
-  color: #555;
-  font-weight: 500;
-}
-.prompt-toggle {
-  font-size: 0.72rem;
-  color: #6366f1;
-  cursor: pointer;
-  user-select: none;
-  margin-bottom: 5px;
-  display: inline-block;
-  padding: 3px 0;
-}
-.prompt-body {
-  display: none;
-  background: #fafafa;
-  border-left: 3px solid #818cf8;
-  border-radius: 0 5px 5px 0;
-  padding: 7px 9px;
-  font-size: 0.69rem;
-  font-family: 'Menlo', 'Consolas', monospace;
-  color: #3c3c3c;
-  line-height: 1.5;
-  white-space: pre-wrap;
-  margin-bottom: 8px;
-  max-height: 160px;
-  overflow-y: auto;
-}
-.card-actions { display: flex; gap: 6px; flex-wrap: wrap; }
-.btn {
-  font-size: 0.72rem;
-  padding: 6px 10px;
-  min-height: 34px;
-  border-radius: 6px;
-  border: 1px solid #e0e0e0;
-  background: white;
-  cursor: pointer;
-  color: #555;
-  white-space: nowrap;
-  touch-action: manipulation;
-}
-.btn:active { transform: scale(0.97); }
-@media (hover: hover) { .btn:hover { background: #f5f5f5; } }
-.btn-todo { border-color: #93c5fd; color: #1d4ed8; }
-.btn-done { border-color: #6ee7b7; color: #065f46; }
-.btn-nfm  { border-color: #fcd34d; color: #92400e; }
-.btn-copy { border-color: #c4b5fd; color: #5b21b6; }
-.btn-copy.copied { background: #ede9fe; }
+/* Week */
+.week-add { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:14px; align-items:center; }
+.week-add select, .week-add input { font-size:0.8rem; padding:7px 8px; border:1px solid #d8dadf; border-radius:7px; background:#fff; }
+.week-add input[type=text]{ flex:1; min-width:140px; }
+.week-add button { font-size:0.8rem; font-weight:600; padding:7px 14px; border:none; border-radius:7px; background:var(--indigo); color:#fff; cursor:pointer; }
+.week-grid { display:grid; grid-template-columns:repeat(5,1fr); gap:10px; }
+.week-grid.has-weekend { grid-template-columns:repeat(7,1fr); }
+.day-col { background:#e9ebf0; border-radius:11px; padding:9px; min-height:90px; }
+.day-col.is-today { background:#e0e7ff; box-shadow:inset 0 0 0 2px #c7d2fe; }
+.day-name { font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; color:#555; margin-bottom:8px; }
+.sched-item { position:relative; background:#fff; border-radius:7px; padding:6px 8px; margin-bottom:6px; font-size:0.76rem; border-left:3px solid #cbd5e1; }
+.sched-item .x { position:absolute; top:3px; right:4px; border:none; background:transparent; color:#bbb; cursor:pointer; font-size:0.9rem; line-height:1; }
+.sched-item .x:hover { color:#ef4444; }
+.si-time { font-size:0.66rem; color:#94a3b8; }
+.si-title { font-weight:500; padding-right:12px; }
+.si-notes { font-size:0.68rem; color:#94a3b8; margin-top:2px; }
+.sched-item.ghost { background:#f6f7f9; border-style:dashed; opacity:0.9; }
+.kind-class{border-left-color:#3b82f6;} .kind-meeting{border-left-color:#8b5cf6;} .kind-observation{border-left-color:#10b981;}
+.kind-coverage{border-left-color:#f59e0b;} .kind-event{border-left-color:#64748b;} .kind-prep{border-left-color:#06b6d4;}
+.tag-class{background:#3b82f6;} .tag-meeting{background:#8b5cf6;} .tag-observation{background:#10b981;} .tag-coverage{background:#f59e0b;} .tag-event{background:#64748b;} .tag-prep{background:#06b6d4;}
 
-.empty { color: #b3b6bd; font-size: 0.78rem; text-align: center; padding: 24px 0; }
+/* Observations */
+.obs-summary { font-size:0.92rem; margin-bottom:14px; }
+.obs-row { display:flex; gap:8px; align-items:center; background:#fff; border-radius:9px; padding:9px 11px; margin-bottom:8px; box-shadow:0 1px 2px rgba(0,0,0,0.06); flex-wrap:wrap; }
+.obs-row.done { background:#f0fdf4; }
+.obs-row input[type=checkbox] { width:20px; height:20px; flex:none; accent-color:#10b981; }
+.obs-subj { flex:1; min-width:140px; font-size:0.85rem; padding:6px 8px; border:1px solid #e3e4e8; border-radius:6px; }
+.obs-day { font-size:0.8rem; padding:6px; border:1px solid #e3e4e8; border-radius:6px; }
+.obs-notes { flex:2; min-width:140px; font-size:0.8rem; padding:6px 8px; border:1px solid #e3e4e8; border-radius:6px; color:#666; }
+.obs-row .x { border:none; background:transparent; color:#bbb; cursor:pointer; font-size:1.1rem; }
+.obs-row .x:hover { color:#ef4444; }
+.add-btn { font-size:0.82rem; font-weight:600; padding:9px 16px; border:1px dashed #c4b5fd; border-radius:9px; background:#faf9ff; color:#6d28d9; cursor:pointer; margin-top:4px; }
 
-/* Touch devices: larger tap targets, no drag cursor */
-@media (hover: none) {
-  .btn { font-size: 0.78rem; padding: 8px 12px; min-height: 40px; }
-  .prompt-toggle { font-size: 0.78rem; padding: 5px 0; }
-}
+/* Agenda */
+.agenda-head { font-size:0.92rem; font-weight:600; margin-bottom:14px; color:#444; }
+.agenda-field { margin-bottom:14px; }
+.agenda-field label { display:block; font-size:0.82rem; font-weight:700; margin-bottom:6px; }
+.agenda-field textarea { width:100%; min-height:88px; resize:vertical; font-size:0.86rem; font-family:inherit; line-height:1.5; padding:10px 12px; border:1px solid #d8dadf; border-radius:9px; background:#fff; outline:none; }
+.agenda-field textarea:focus { border-color:var(--indigo); box-shadow:0 0 0 3px rgba(99,102,241,0.12); }
+.save-note { font-size:0.72rem; color:#9aa0aa; margin-left:8px; }
+
+@media (hover:none){ .btn{font-size:0.78rem; padding:8px 12px; min-height:40px;} .prompt-toggle{font-size:0.78rem;} }
+@media (max-width:640px){ .week-grid{grid-template-columns:1fr; } .week-grid.has-weekend{grid-template-columns:1fr;} .day-col{min-height:auto;} }
 </style>
 </head>
 <body>
 
 <div id="login">
   <form class="login-box" onsubmit="event.preventDefault(); signIn();">
-    <div class="login-title">📬 Task Board</div>
-    <div class="login-sub">Sign in to view your tasks</div>
+    <div class="login-title">📋 Workflow Dashboard</div>
+    <div class="login-sub">Sign in to continue</div>
     <input id="login-email" type="email" placeholder="Email" autocomplete="username" aria-label="Email">
     <input id="login-pass" type="password" placeholder="Password" autocomplete="current-password" aria-label="Password">
     <button id="login-btn" class="login-btn" type="submit">Sign in</button>
@@ -211,289 +157,307 @@ header .meta { font-size: 0.76rem; color: #888; margin-top: 4px; }
 </div>
 
 <div id="app" style="display:none">
-  <header>
-    <h1>📬 Email Task Board</h1>
-    <div class="meta">
-      <span id="progress">Loading…</span> · <a href="#" class="signout" onclick="event.preventDefault(); signOut();">Sign out</a>
-    </div>
-  </header>
-
-  <div class="toolbar">
-    <input id="search" type="search" placeholder="🔍 Filter tasks…" autocomplete="off"
-           oninput="onSearch(this.value)" aria-label="Filter tasks">
+  <div class="appbar">
+    <div class="brand">📋 Workflow</div>
+    <nav class="nav">
+      <button data-sec="overview" class="active" onclick="showSection('overview')">Overview</button>
+      <button data-sec="board" onclick="showSection('board')">Board</button>
+      <button data-sec="week" onclick="showSection('week')">Week</button>
+      <button data-sec="obs" onclick="showSection('obs')">Observations</button>
+      <button data-sec="agenda" onclick="showSection('agenda')">Agenda</button>
+    </nav>
+    <a href="#" class="signout" onclick="event.preventDefault(); signOut();">Sign out</a>
   </div>
 
-  <div class="board">
-    <div class="col" id="col-todo"
-         ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="onDrop(event,'todo')">
-      <div class="col-header">To Do <span class="badge" id="n-todo">0</span></div>
-      <div id="cards-todo"></div>
+  <section id="sec-overview" class="section"></section>
+
+  <section id="sec-board" class="section" style="display:none">
+    <div class="toolbar"><input id="search" type="search" placeholder="🔍 Filter tasks…" autocomplete="off" oninput="onSearch(this.value)" aria-label="Filter tasks"></div>
+    <div class="board">
+      <div class="col" id="col-todo" ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="onDrop(event,'todo')">
+        <div class="col-header">To Do <span class="badge" id="n-todo">0</span></div><div id="cards-todo"></div>
+      </div>
+      <div class="col" id="col-completed" ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="onDrop(event,'completed')">
+        <div class="col-header">Completed <span class="badge" id="n-completed">0</span></div><div id="cards-completed"></div>
+      </div>
+      <div class="col" id="col-notforme" ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="onDrop(event,'notforme')">
+        <div class="col-header">Not for Me <span class="badge" id="n-notforme">0</span></div><div id="cards-notforme"></div>
+      </div>
     </div>
-    <div class="col" id="col-completed"
-         ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="onDrop(event,'completed')">
-      <div class="col-header">Completed <span class="badge" id="n-completed">0</span></div>
-      <div id="cards-completed"></div>
+  </section>
+
+  <section id="sec-week" class="section" style="display:none">
+    <div class="week-add">
+      <select id="sc-day"></select>
+      <input id="sc-start" type="time" aria-label="Start">
+      <input id="sc-end" type="time" aria-label="End">
+      <input id="sc-title" type="text" placeholder="Add a block (title)…">
+      <select id="sc-kind">
+        <option value="class">Class</option><option value="meeting">Meeting</option>
+        <option value="observation">Observation</option><option value="coverage">Coverage</option>
+        <option value="event" selected>Event</option><option value="prep">Prep</option>
+      </select>
+      <button onclick="addSchedule()">+ Add</button>
     </div>
-    <div class="col" id="col-notforme"
-         ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="onDrop(event,'notforme')">
-      <div class="col-header">Not for Me <span class="badge" id="n-notforme">0</span></div>
-      <div id="cards-notforme"></div>
-    </div>
-  </div>
+    <div class="week-grid" id="weekGrid"></div>
+  </section>
+
+  <section id="sec-obs" class="section" style="display:none">
+    <div id="obsHead"></div>
+    <div id="obsList"></div>
+    <button class="add-btn" onclick="addObservation()">+ Add observation</button>
+  </section>
+
+  <section id="sec-agenda" class="section" style="display:none">
+    <div id="agendaWrap"></div>
+  </section>
 </div>
 
 <script>
-// ── Supabase config ──────────────────────────────────────────────────────────
-// The publishable (anon) key is safe to ship to the browser: it grants NO data
-// access on its own. Tasks and statuses are protected by Row Level Security and
-// require an authenticated session, so this file can live on a public URL with
-// no task data baked into it.
-const SB_URL    = 'https://dsvkaqahhbsyvkcivitt.supabase.co';
-const SB_ANON   = 'sb_publishable_iLSv8HfFT2XClquYoAHMZw_K1U2eyFW';
-const SB_TASKS  = 'jhan_tasks';
-const SB_STATUS = 'jhan_kanban_status';
-const LS_SESSION = 'jhan_session';
+// ── Supabase config (publishable key — safe; RLS + auth protect all data) ──
+const SB_URL='https://dsvkaqahhbsyvkcivitt.supabase.co';
+const SB_ANON='sb_publishable_iLSv8HfFT2XClquYoAHMZw_K1U2eyFW';
+const LS_SESSION='jhan_session';
 
-let TASKS = [];
-let STATUSES = {};
-let filterText = '';
+// ── State ──
+let TASKS=[], STATUSES={}, SCHEDULE=[], OBS=[], AGENDA=null;
+let filterText='', agendaDirty=false, currentSection='overview';
 
-// ── Session (access + refresh token) stored per device ───────────────────────
-function getSession() {
-  try { return JSON.parse(localStorage.getItem(LS_SESSION) || 'null'); } catch { return null; }
-}
-function saveSession(s) {
-  localStorage.setItem(LS_SESSION, JSON.stringify({
-    access_token: s.access_token,
-    refresh_token: s.refresh_token,
-    expires_at: s.expires_at || (Math.floor(Date.now() / 1000) + (s.expires_in || 3600))
-  }));
-}
-function clearSession() { localStorage.removeItem(LS_SESSION); }
+const DAY_NAMES=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+const FULLDAY=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+function mondayOf(d){ const x=new Date(d); const wd=(x.getDay()+6)%7; x.setHours(0,0,0,0); x.setDate(x.getDate()-wd); return x; }
+function ymd(d){ return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
+const WEEK_START=ymd(mondayOf(new Date()));
+const TODAY=ymd(new Date());
+function todayWd(){ return (new Date().getDay()+6)%7; }
+const WEEK_LABEL=(function(){ const m=mondayOf(new Date()); return m.toLocaleDateString(undefined,{month:'short',day:'numeric'}); })();
+const arr=x=>Array.isArray(x)?x:[];
 
-async function refreshSession() {
-  const s = getSession();
-  if (!s || !s.refresh_token) return false;
-  try {
-    const r = await fetch(`${SB_URL}/auth/v1/token?grant_type=refresh_token`, {
-      method: 'POST',
-      headers: { apikey: SB_ANON, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refresh_token: s.refresh_token })
-    });
-    if (!r.ok) return false;
-    const data = await r.json();
-    if (!data.access_token) return false;
-    saveSession(data);
-    return true;
-  } catch { return false; }
-}
+// ── Session / auth ──
+function getSession(){ try{ return JSON.parse(localStorage.getItem(LS_SESSION)||'null'); }catch{ return null; } }
+function saveSession(s){ localStorage.setItem(LS_SESSION, JSON.stringify({ access_token:s.access_token, refresh_token:s.refresh_token, expires_at:s.expires_at||(Math.floor(Date.now()/1000)+(s.expires_in||3600)) })); }
+function clearSession(){ localStorage.removeItem(LS_SESSION); }
+async function refreshSession(){ const s=getSession(); if(!s||!s.refresh_token) return false;
+  try{ const r=await fetch(`${SB_URL}/auth/v1/token?grant_type=refresh_token`,{method:'POST',headers:{apikey:SB_ANON,'Content-Type':'application/json'},body:JSON.stringify({refresh_token:s.refresh_token})});
+    if(!r.ok) return false; const d=await r.json(); if(!d.access_token) return false; saveSession(d); return true; }catch{ return false; } }
+async function authFetch(path,opts={},retry=true){ const s=getSession(); const headers=Object.assign({apikey:SB_ANON},opts.headers||{}); if(s&&s.access_token) headers.Authorization='Bearer '+s.access_token;
+  const r=await fetch(`${SB_URL}${path}`,Object.assign({},opts,{headers})); if(r.status===401&&retry&&await refreshSession()) return authFetch(path,opts,false); return r; }
 
-// fetch against Supabase REST with auth; auto-refresh once on 401
-async function authFetch(path, opts = {}, retry = true) {
-  const s = getSession();
-  const headers = Object.assign({ apikey: SB_ANON }, opts.headers || {});
-  if (s && s.access_token) headers.Authorization = 'Bearer ' + s.access_token;
-  const r = await fetch(`${SB_URL}${path}`, Object.assign({}, opts, { headers }));
-  if (r.status === 401 && retry && await refreshSession()) {
-    return authFetch(path, opts, false);
-  }
-  return r;
-}
+async function signIn(){ const email=document.getElementById('login-email').value.trim(); const pass=document.getElementById('login-pass').value;
+  const errEl=document.getElementById('login-error'); const btn=document.getElementById('login-btn'); errEl.style.display='none'; btn.disabled=true; btn.textContent='Signing in…';
+  try{ const r=await fetch(`${SB_URL}/auth/v1/token?grant_type=password`,{method:'POST',headers:{apikey:SB_ANON,'Content-Type':'application/json'},body:JSON.stringify({email,password:pass})});
+    const d=await r.json(); if(!r.ok||!d.access_token) throw new Error(d.error_description||d.msg||'Sign-in failed'); saveSession(d); showApp(); await loadData();
+  }catch(e){ errEl.textContent=(e&&e.message)||'Sign-in failed'; errEl.style.display='block'; } finally{ btn.disabled=false; btn.textContent='Sign in'; } }
+function signOut(){ const s=getSession(); if(s&&s.access_token) fetch(`${SB_URL}/auth/v1/logout`,{method:'POST',headers:{apikey:SB_ANON,Authorization:'Bearer '+s.access_token}}).catch(()=>{});
+  clearSession(); TASKS=[];STATUSES={};SCHEDULE=[];OBS=[];AGENDA=null; showLogin(); }
+function showLogin(){ document.getElementById('login').style.display='flex'; document.getElementById('app').style.display='none'; document.getElementById('login-pass').value=''; }
+function showApp(){ document.getElementById('login').style.display='none'; document.getElementById('app').style.display='block'; }
 
-// ── Auth actions ─────────────────────────────────────────────────────────────
-async function signIn() {
-  const email = document.getElementById('login-email').value.trim();
-  const pass  = document.getElementById('login-pass').value;
-  const errEl = document.getElementById('login-error');
-  const btn   = document.getElementById('login-btn');
-  errEl.style.display = 'none';
-  btn.disabled = true; btn.textContent = 'Signing in…';
-  try {
-    const r = await fetch(`${SB_URL}/auth/v1/token?grant_type=password`, {
-      method: 'POST',
-      headers: { apikey: SB_ANON, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password: pass })
-    });
-    const data = await r.json();
-    if (!r.ok || !data.access_token) throw new Error(data.error_description || data.msg || 'Sign-in failed');
-    saveSession(data);
-    showBoard();
-    await loadData();
-  } catch (e) {
-    errEl.textContent = (e && e.message) || 'Sign-in failed';
-    errEl.style.display = 'block';
-  } finally {
-    btn.disabled = false; btn.textContent = 'Sign in';
-  }
-}
+// ── Supabase CRUD helpers ──
+async function sbInsert(table,row){ const r=await authFetch(`/rest/v1/${table}`,{method:'POST',headers:{'Content-Type':'application/json',Prefer:'return=representation'},body:JSON.stringify(row)}); if(r.status===401){signOut();return null;} return r.ok?(await r.json())[0]:null; }
+async function sbUpdate(table,match,patch){ const r=await authFetch(`/rest/v1/${table}?${match}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(patch)}); if(r.status===401)signOut(); return r.ok; }
+async function sbDelete(table,match){ const r=await authFetch(`/rest/v1/${table}?${match}`,{method:'DELETE'}); if(r.status===401)signOut(); return r.ok; }
 
-function signOut() {
-  const s = getSession();
-  if (s && s.access_token) {
-    fetch(`${SB_URL}/auth/v1/logout`, {
-      method: 'POST',
-      headers: { apikey: SB_ANON, Authorization: 'Bearer ' + s.access_token }
-    }).catch(() => {});
-  }
-  clearSession();
-  TASKS = []; STATUSES = {};
-  showLogin();
-}
-
-function showLogin() {
-  document.getElementById('login').style.display = 'flex';
-  document.getElementById('app').style.display = 'none';
-  document.getElementById('login-pass').value = '';
-}
-function showBoard() {
-  document.getElementById('login').style.display = 'none';
-  document.getElementById('app').style.display = 'block';
-}
-
-// ── Data ─────────────────────────────────────────────────────────────────────
-async function loadData() {
-  try {
-    const [tr, sr] = await Promise.all([
-      authFetch(`/rest/v1/${SB_TASKS}?select=hash,text,prompt,source,first_seen`),
-      authFetch(`/rest/v1/${SB_STATUS}?select=hash,status`)
+// ── Load everything ──
+async function loadData(){
+  try{
+    const [tr,sr,scr,obr,agr]=await Promise.all([
+      authFetch(`/rest/v1/jhan_tasks?select=hash,text,prompt,source,first_seen,email_from,email_subject,email_received,email_body,email_link,due_date,pinned`),
+      authFetch(`/rest/v1/jhan_kanban_status?select=hash,status`),
+      authFetch(`/rest/v1/jhan_schedule?select=*`),
+      authFetch(`/rest/v1/jhan_observations?select=*&week_start=eq.${WEEK_START}`),
+      authFetch(`/rest/v1/jhan_agenda?select=*&week_start=eq.${WEEK_START}`)
     ]);
-    if (tr.status === 401 || sr.status === 401) { signOut(); return; }
-    const tasks = await tr.json();
-    const statuses = await sr.json();
-    TASKS = (Array.isArray(tasks) ? tasks : []).map(t => ({
-      hash: t.hash, text: t.text, prompt: t.prompt, source: t.source, firstSeen: t.first_seen
-    }));
-    STATUSES = {};
-    if (Array.isArray(statuses)) for (const row of statuses) STATUSES[row.hash] = row.status;
-    render();
-  } catch {
-    document.getElementById('progress').textContent = 'Offline — could not load tasks';
+    if([tr,sr,scr,obr,agr].some(r=>r.status===401)){ signOut(); return; }
+    const tasks=arr(await tr.json()), statuses=arr(await sr.json());
+    TASKS=tasks.map(t=>({hash:t.hash,text:t.text,prompt:t.prompt,source:t.source,firstSeen:t.first_seen,
+      email_from:t.email_from,email_subject:t.email_subject,email_received:t.email_received,email_body:t.email_body,email_link:t.email_link,
+      due_date:t.due_date,pinned:t.pinned}));
+    STATUSES={}; for(const r of statuses) STATUSES[r.hash]=r.status;
+    SCHEDULE=arr(await scr.json());
+    OBS=arr(await obr.json());
+    const ag=arr(await agr.json()); AGENDA=ag[0]||{week_start:WEEK_START,data:'',team_culture:'',scholar_culture:'',housekeeping:''};
+    renderAll();
+  }catch(e){ const o=document.getElementById('sec-overview'); if(o) o.innerHTML='<div class="muted">Offline — could not load your data. Pull to refresh.</div>'; }
+}
+
+// ── Helpers ──
+function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function daysAgo(iso){ if(!iso) return '—'; const d=Math.floor((Date.now()-new Date(iso).getTime())/86400000); if(d<=0)return'today'; if(d===1)return'1 day'; return d+' days'; }
+function fmtDue(d){ try{ return new Date(d+'T00:00:00').toLocaleDateString(undefined,{month:'short',day:'numeric'}); }catch{ return d; } }
+function bySched(a,b){ const t=(x)=>x.start_time||'99:99'; if(t(a)!==t(b)) return t(a)<t(b)?-1:1; return (a.sort||0)-(b.sort||0); }
+function greeting(){ const h=new Date().getHours(); return h<12?'Good morning':h<17?'Good afternoon':'Good evening'; }
+function statusOf(t){ const s=STATUSES[t.hash]; return (s==='completed'||s==='notforme')?s:'todo'; }
+function taskCounts(){ const c={todo:0,completed:0,notforme:0}; for(const t of TASKS) c[statusOf(t)]++; return c; }
+
+// ── Section router ──
+function showSection(name){
+  currentSection=name;
+  for(const s of ['overview','board','week','obs','agenda']) document.getElementById('sec-'+s).style.display = (s===name)?'':'none';
+  document.querySelectorAll('.nav button').forEach(b=>b.classList.toggle('active', b.dataset.sec===name));
+}
+
+function renderAll(){ renderOverview(); renderBoard(); renderWeek(); renderObs(); renderAgenda(); }
+
+// ── Overview ──
+function priorityItems(){
+  const items=[];
+  for(const t of TASKS){ if(statusOf(t)!=='todo') continue; if(t.pinned||t.due_date) items.push(t); }
+  items.sort((a,b)=>{ if(a.due_date&&b.due_date) return a.due_date<b.due_date?-1:1; if(a.due_date)return -1; if(b.due_date)return 1; return 0; });
+  return items.slice(0,8);
+}
+function renderOverview(){
+  const el=document.getElementById('sec-overview'); const now=new Date(); const wd=todayWd();
+  const today=SCHEDULE.filter(s=>s.weekday===wd).sort(bySched);
+  const pri=priorityItems(); const obsDone=OBS.filter(o=>o.done).length; const c=taskCounts();
+  const schedLine=s=>`<div class="ov-line"><span class="ov-time">${esc(s.start_time||'')}</span><span class="kind-tag tag-${s.kind}"></span><span>${esc(s.title)}</span></div>`;
+  const priLine=t=>`<div class="ov-line"><span>${t.pinned?'📌 ':''}${esc(t.text.length>70?t.text.slice(0,70)+'…':t.text)}</span>${t.due_date?`<span class="due-chip ${t.due_date<TODAY?'overdue':''}" style="margin-left:auto">${fmtDue(t.due_date)}</span>`:''}</div>`;
+  const obsMini=o=>`<div class="ov-line"><span>${o.done?'✓ ':'○ '}${o.subject?esc(o.subject):'<span class="muted">unassigned</span>'}</span><span class="ov-time" style="margin-left:auto">${o.planned_day!=null?DAY_NAMES[o.planned_day]:''}</span></div>`;
+  el.innerHTML=`
+    <div class="ov-greet">${greeting()} — ${now.toLocaleDateString(undefined,{weekday:'long',month:'long',day:'numeric'})}</div>
+    <div class="cards-grid">
+      <div class="ov-card" onclick="showSection('week')">
+        <h3>📅 Today</h3>
+        ${ wd>4 ? '<div class="muted">No school today</div>' : (today.length? today.map(schedLine).join('') : '<div class="muted">Nothing scheduled</div>') }
+      </div>
+      <div class="ov-card" onclick="showSection('board')">
+        <h3>⚡ Priorities &amp; deadlines</h3>
+        ${ pri.length? pri.map(priLine).join('') : '<div class="muted">Nothing pinned or due 🎉</div>' }
+      </div>
+      <div class="ov-card" onclick="showSection('obs')">
+        <h3>👁 Observations <span class="pill ${obsDone>=3?'ok':''}">${obsDone}/3</span></h3>
+        ${ OBS.length? OBS.map(obsMini).join('') : '<div class="muted">None planned this week</div>' }
+      </div>
+      <div class="ov-card" onclick="showSection('board')">
+        <h3>🗂 Tasks</h3>
+        <div class="stat-row"><span class="dot todo"></span>To Do <b>${c.todo}</b></div>
+        <div class="stat-row"><span class="dot done"></span>Completed <b>${c.completed}</b></div>
+        <div class="stat-row"><span class="dot nfm"></span>Not for me <b>${c.notforme}</b></div>
+      </div>
+    </div>`;
+}
+
+// ── Board ──
+function onSearch(v){ filterText=v.trim().toLowerCase(); renderBoard(); }
+function matchesFilter(t){ if(!filterText) return true; return (t.text+' '+(t.source||'')+' '+(t.email_subject||'')).toLowerCase().includes(filterText); }
+let draggingHash=null;
+function onDragOver(e){ e.preventDefault(); e.currentTarget.classList.add('drop-over'); }
+function onDragLeave(e){ e.currentTarget.classList.remove('drop-over'); }
+function onDrop(e,status){ e.preventDefault(); e.currentTarget.classList.remove('drop-over'); if(draggingHash){ setStatus(draggingHash,status); draggingHash=null; } }
+function setStatus(hash,status){ STATUSES[hash]=status; renderBoard(); renderOverview();
+  authFetch(`/rest/v1/jhan_kanban_status?on_conflict=hash`,{method:'POST',headers:{'Content-Type':'application/json',Prefer:'resolution=merge-duplicates'},body:JSON.stringify([{hash,status}])}).then(r=>{if(r.status===401)signOut();}).catch(()=>{}); }
+function togglePin(hash){ const t=TASKS.find(x=>x.hash===hash); if(!t)return; t.pinned=!t.pinned; renderBoard(); renderOverview(); sbUpdate('jhan_tasks',`hash=eq.${hash}`,{pinned:t.pinned}); }
+function setDue(hash,val){ const t=TASKS.find(x=>x.hash===hash); if(!t)return; t.due_date=val||null; renderBoard(); renderOverview(); sbUpdate('jhan_tasks',`hash=eq.${hash}`,{due_date:t.due_date}); }
+function renderBoard(){
+  const cols={todo:[],completed:[],notforme:[]};
+  for(const t of TASKS){ const st=statusOf(t); if(matchesFilter(t)) cols[st].push({...t,status:st}); }
+  for(const k of Object.keys(cols)) cols[k].sort((a,b)=>(b.pinned?1:0)-(a.pinned?1:0));
+  for(const s of ['todo','completed','notforme']){
+    const cont=document.getElementById('cards-'+s); document.getElementById('n-'+s).textContent=cols[s].length;
+    if(!cols[s].length){ cont.innerHTML=`<div class="empty">${filterText?'No matches':'No tasks'}</div>`; continue; }
+    cont.innerHTML=''; for(const t of cols[s]) cont.appendChild(makeCard(t));
   }
 }
-
-function setStatus(hash, status) {
-  STATUSES[hash] = status;   // optimistic
-  render();
-  authFetch(`/rest/v1/${SB_STATUS}?on_conflict=hash`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates' },
-    body: JSON.stringify([{ hash, status }])
-  }).then(r => { if (r.status === 401) signOut(); }).catch(() => {});
-}
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-function esc(s) {
-  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
-function daysAgo(iso) {
-  if (!iso) return '—';
-  const d = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
-  if (d <= 0) return 'today';
-  if (d === 1) return '1 day';
-  return d + ' days';
-}
-
-// ── Search / filter ───────────────────────────────────────────────────────────
-function onSearch(v) { filterText = v.trim().toLowerCase(); render(); }
-function matchesFilter(t) {
-  if (!filterText) return true;
-  return (t.text + ' ' + (t.source || '')).toLowerCase().includes(filterText);
-}
-
-// ── Drag & drop (desktop / mouse — touch users use the move buttons) ──────────
-let draggingHash = null;
-function onDragOver(e) { e.preventDefault(); e.currentTarget.classList.add('drop-over'); }
-function onDragLeave(e) { e.currentTarget.classList.remove('drop-over'); }
-function onDrop(e, status) {
-  e.preventDefault();
-  e.currentTarget.classList.remove('drop-over');
-  if (draggingHash) { setStatus(draggingHash, status); draggingHash = null; }
-}
-
-// ── Render ────────────────────────────────────────────────────────────────────
-function render() {
-  const cols = { todo: [], completed: [], notforme: [] };
-  let totalDone = 0;
-
-  for (const t of TASKS) {
-    const status = cols[STATUSES[t.hash]] ? STATUSES[t.hash] : 'todo';
-    if (status === 'completed') totalDone++;
-    if (matchesFilter(t)) cols[status].push({ ...t, status });
-  }
-
-  document.getElementById('progress').textContent = `${totalDone} of ${TASKS.length} done`;
-
-  for (const s of ['todo', 'completed', 'notforme']) {
-    const container = document.getElementById('cards-' + s);
-    document.getElementById('n-' + s).textContent = cols[s].length;
-    if (!cols[s].length) {
-      container.innerHTML = `<div class="empty">${filterText ? 'No matches' : 'No tasks'}</div>`;
-      continue;
-    }
-    container.innerHTML = '';
-    for (const t of cols[s]) container.appendChild(makeCard(t));
-  }
-}
-
-function makeCard(t) {
-  const div = document.createElement('div');
-  div.className = 'card';
-  div.draggable = true;
-  div.addEventListener('dragstart', () => { draggingHash = t.hash; div.classList.add('dragging'); });
-  div.addEventListener('dragend', () => div.classList.remove('dragging'));
-
-  const moveBtns = [
-    t.status !== 'todo'      ? `<button class="btn btn-todo" onclick="setStatus('${t.hash}','todo')">↩ To Do</button>` : '',
-    t.status !== 'completed' ? `<button class="btn btn-done" onclick="setStatus('${t.hash}','completed')">✓ Done</button>` : '',
-    t.status !== 'notforme'  ? `<button class="btn btn-nfm"  onclick="setStatus('${t.hash}','notforme')">✗ Not mine</button>` : '',
-    t.prompt                 ? `<button class="btn btn-copy" id="copy-${t.hash}" onclick="copyPrompt('${t.hash}')">⎘ Copy prompt</button>` : ''
+function makeCard(t){
+  const div=document.createElement('div'); div.className='card'+(t.pinned?' pinned':''); div.draggable=true;
+  div.addEventListener('dragstart',()=>{draggingHash=t.hash; div.classList.add('dragging');});
+  div.addEventListener('dragend',()=>div.classList.remove('dragging'));
+  const moveBtns=[
+    t.status!=='todo'?`<button class="btn btn-todo" onclick="setStatus('${t.hash}','todo')">↩ To Do</button>`:'',
+    t.status!=='completed'?`<button class="btn btn-done" onclick="setStatus('${t.hash}','completed')">✓ Done</button>`:'',
+    t.status!=='notforme'?`<button class="btn btn-nfm" onclick="setStatus('${t.hash}','notforme')">✗ Not mine</button>`:'',
+    t.prompt?`<button class="btn btn-copy" id="copy-${t.hash}" onclick="copyPrompt('${t.hash}')">⎘ Copy prompt</button>`:''
   ].join('');
-
-  const promptSection = t.prompt ? `
-    <span class="prompt-toggle" onclick="togglePrompt(this)">▶ Claude prompt</span>
-    <div class="prompt-body">${esc(t.prompt)}</div>` : '';
-
-  div.innerHTML = `
+  const promptSection=t.prompt?`<span class="prompt-toggle" onclick="togglePrompt(this)">▶ Claude prompt</span><div class="prompt-body">${esc(t.prompt)}</div>`:'';
+  let emailSection='';
+  if(t.email_body||t.email_link||t.email_subject){
+    let inner='';
+    if(t.email_from) inner+=`<b>From:</b> ${esc(t.email_from)}\n`;
+    if(t.email_subject) inner+=`<b>Subject:</b> ${esc(t.email_subject)}\n`;
+    if(t.email_received) inner+=`<b>Received:</b> ${esc(new Date(t.email_received).toLocaleString())}\n`;
+    if(t.email_body) inner+='\n'+esc(t.email_body);
+    if(t.email_link) inner+=`\n\n<a href="${esc(t.email_link)}" target="_blank" rel="noopener">↗ Open in Outlook</a>`;
+    emailSection=`<span class="prompt-toggle" onclick="togglePrompt(this)">📎 Source email</span><div class="prompt-body email-body">${inner}</div>`;
+  }
+  const dueChip=t.due_date?`<span class="due-chip ${t.due_date<TODAY?'overdue':''}">📅 ${fmtDue(t.due_date)}</span>`:'';
+  div.innerHTML=`
+    <div class="card-top"><button class="pin ${t.pinned?'on':''}" title="Pin" onclick="togglePin('${t.hash}')">📌</button></div>
     <div class="card-title">${esc(t.text)}</div>
-    <div class="card-meta">
-      <span class="age-chip">⏱ ${daysAgo(t.firstSeen)}</span>
-      <span>${esc(t.source || 'email')}</span>
-    </div>
-    ${promptSection}
+    <div class="card-meta"><span class="age-chip">⏱ ${daysAgo(t.firstSeen)}</span>${dueChip}<span>${esc(t.source||'email')}</span></div>
+    <label class="due-set">📅 due <input type="date" value="${t.due_date||''}" onchange="setDue('${t.hash}',this.value)"></label>
+    ${promptSection}${emailSection}
     <div class="card-actions">${moveBtns}</div>`;
   return div;
 }
+function togglePrompt(el){ const b=el.nextElementSibling; const open=b.style.display==='block'; b.style.display=open?'none':'block'; const c=el.textContent; if(c[0]==='▶'||c[0]==='▼') el.textContent=(open?'▶':'▼')+c.slice(1); }
+function copyPrompt(hash){ const t=TASKS.find(t=>t.hash===hash); if(!t||!t.prompt)return; navigator.clipboard.writeText(t.prompt).then(()=>{ const b=document.getElementById('copy-'+hash); if(b){ b.textContent='✓ Copied'; b.classList.add('copied'); setTimeout(()=>{b.textContent='⎘ Copy prompt'; b.classList.remove('copied');},1800);} }).catch(()=>{}); }
 
-function togglePrompt(el) {
-  const body = el.nextElementSibling;
-  const open = body.style.display === 'block';
-  body.style.display = open ? 'none' : 'block';
-  el.textContent = (open ? '▶' : '▼') + ' Claude prompt';
+// ── Week ──
+function renderWeek(){
+  const grid=document.getElementById('weekGrid'); const hasWeekend=SCHEDULE.some(s=>s.weekday>4);
+  grid.classList.toggle('has-weekend',hasWeekend);
+  const cols=hasWeekend?[0,1,2,3,4,5,6]:[0,1,2,3,4];
+  grid.innerHTML=cols.map(d=>{
+    const items=SCHEDULE.filter(s=>s.weekday===d).sort(bySched);
+    const obsToday=OBS.filter(o=>o.planned_day===d);
+    return `<div class="day-col ${d===todayWd()?'is-today':''}"><div class="day-name">${FULLDAY[d]}</div>
+      ${items.map(s=>`<div class="sched-item kind-${s.kind}"><button class="x" title="Delete" onclick="delSchedule('${s.id}')">×</button>
+        <div class="si-time">${esc(s.start_time||'')}${s.end_time?'–'+esc(s.end_time):''}</div>
+        <div class="si-title">${esc(s.title)}</div>${s.notes?`<div class="si-notes">${esc(s.notes)}</div>`:''}</div>`).join('')}
+      ${obsToday.map(o=>`<div class="sched-item kind-observation ghost"><div class="si-title">👁 ${o.subject?esc(o.subject):'Observation'}${o.done?' ✓':''}</div></div>`).join('')}
+    </div>`;
+  }).join('');
 }
-
-function copyPrompt(hash) {
-  const t = TASKS.find(t => t.hash === hash);
-  if (!t || !t.prompt) return;
-  navigator.clipboard.writeText(t.prompt).then(() => {
-    const btn = document.getElementById('copy-' + hash);
-    if (btn) { btn.textContent = '✓ Copied'; btn.classList.add('copied'); setTimeout(() => { btn.textContent = '⎘ Copy prompt'; btn.classList.remove('copied'); }, 1800); }
-  }).catch(() => {});
+async function addSchedule(){
+  const title=document.getElementById('sc-title').value.trim(); if(!title) return;
+  const row={ weekday:+document.getElementById('sc-day').value, start_time:document.getElementById('sc-start').value||null, end_time:document.getElementById('sc-end').value||null, title, kind:document.getElementById('sc-kind').value, sort:30 };
+  const saved=await sbInsert('jhan_schedule',row);
+  if(saved){ SCHEDULE.push(saved); document.getElementById('sc-title').value=''; document.getElementById('sc-start').value=''; document.getElementById('sc-end').value=''; renderWeek(); renderOverview(); }
 }
+function delSchedule(id){ SCHEDULE=SCHEDULE.filter(s=>s.id!==id); renderWeek(); renderOverview(); sbDelete('jhan_schedule',`id=eq.${id}`); }
 
-// ── Boot ──────────────────────────────────────────────────────────────────────
-(async function boot() {
-  const s = getSession();
-  if (s && s.access_token) {
-    const now = Math.floor(Date.now() / 1000);
-    if (s.expires_at && s.expires_at < now + 60 && !(await refreshSession())) {
-      showLogin(); return;
-    }
-    showBoard();
-    await loadData();
-  } else {
-    showLogin();
-    document.getElementById('login-email').focus();
-  }
+// ── Observations ──
+function renderObs(){
+  const done=OBS.filter(o=>o.done).length;
+  document.getElementById('obsHead').innerHTML=`<div class="obs-summary">Week of ${WEEK_LABEL} · <b>${done} of 3</b> done ${done>=3?'✅':''}</div>`;
+  const list=document.getElementById('obsList');
+  list.innerHTML = OBS.length? OBS.slice().sort((a,b)=>(a.planned_day??9)-(b.planned_day??9)).map(o=>`
+    <div class="obs-row ${o.done?'done':''}">
+      <input type="checkbox" ${o.done?'checked':''} onchange="toggleObs('${o.id}',this.checked)" aria-label="Done">
+      <input class="obs-subj" value="${esc(o.subject)}" placeholder="Fellow / teacher name" onchange="updObs('${o.id}','subject',this.value)">
+      <select class="obs-day" onchange="updObs('${o.id}','planned_day',this.value===''?null:+this.value)">
+        <option value="">—</option>${[0,1,2,3,4].map(d=>`<option value="${d}" ${o.planned_day===d?'selected':''}>${DAY_NAMES[d]}</option>`).join('')}
+      </select>
+      <input class="obs-notes" value="${esc(o.notes||'')}" placeholder="Notes" onchange="updObs('${o.id}','notes',this.value)">
+      <button class="x" title="Delete" onclick="delObs('${o.id}')">×</button>
+    </div>`).join('') : '<div class="muted">No observations this week yet.</div>';
+}
+async function addObservation(){ const saved=await sbInsert('jhan_observations',{week_start:WEEK_START,subject:'',planned_day:null,done:false}); if(saved){ OBS.push(saved); renderObs(); renderOverview(); } }
+function toggleObs(id,checked){ const o=OBS.find(x=>x.id===id); if(o){ o.done=checked; o.observed_at=checked?new Date().toISOString():null; } renderObs(); renderOverview(); sbUpdate('jhan_observations',`id=eq.${id}`,{done:checked,observed_at:o?o.observed_at:null}); }
+function updObs(id,field,val){ const o=OBS.find(x=>x.id===id); if(o)o[field]=val; renderOverview(); sbUpdate('jhan_observations',`id=eq.${id}`,{[field]:val}); }
+function delObs(id){ OBS=OBS.filter(o=>o.id!==id); renderObs(); renderOverview(); sbDelete('jhan_observations',`id=eq.${id}`); }
+
+// ── Agenda ──
+function renderAgenda(){
+  const a=AGENDA||{data:'',team_culture:'',scholar_culture:'',housekeeping:''};
+  const fields=[['data','📊 Data'],['team_culture','🤝 Team Culture'],['scholar_culture','🎓 Scholar Culture'],['housekeeping','🧰 Housekeeping']];
+  document.getElementById('agendaWrap').innerHTML=`<div class="agenda-head">Weekly meeting agenda · week of ${WEEK_LABEL}<span class="save-note">saves automatically</span></div>`+
+    fields.map(([k,label])=>`<div class="agenda-field"><label>${label}</label><textarea data-k="${k}" oninput="agendaDirty=true" onblur="saveAgenda()" placeholder="…">${esc(a[k]||'')}</textarea></div>`).join('');
+}
+function saveAgenda(){ if(!agendaDirty) return; agendaDirty=false; const patch={week_start:WEEK_START}; document.querySelectorAll('#agendaWrap textarea').forEach(t=>patch[t.dataset.k]=t.value); patch.updated_at=new Date().toISOString(); AGENDA=Object.assign(AGENDA||{},patch);
+  authFetch(`/rest/v1/jhan_agenda?on_conflict=week_start`,{method:'POST',headers:{'Content-Type':'application/json',Prefer:'resolution=merge-duplicates'},body:JSON.stringify([patch])}).then(r=>{if(r.status===401)signOut();}).catch(()=>{}); }
+
+// ── Init day picker options ──
+(function(){ const sel=document.getElementById('sc-day'); if(sel) sel.innerHTML=[0,1,2,3,4,5,6].map(d=>`<option value="${d}" ${d===Math.min(todayWd(),4)?'selected':''}>${FULLDAY[d]}</option>`).join(''); })();
+
+// ── Boot ──
+(async function boot(){
+  const s=getSession();
+  if(s&&s.access_token){
+    const now=Math.floor(Date.now()/1000);
+    if(s.expires_at&&s.expires_at<now+60&&!(await refreshSession())){ showLogin(); return; }
+    showApp(); await loadData();
+  } else { showLogin(); document.getElementById('login-email').focus(); }
 })();
 </script>
 </body>
