@@ -178,6 +178,19 @@ input, select, textarea { color:var(--text); background:var(--surface); }
 .agenda-field textarea:focus, .notes-area:focus { border-color:var(--indigo); box-shadow:0 0 0 3px rgba(99,102,241,0.12); }
 .save-note { font-size:0.72rem; color:var(--muted); margin-left:8px; }
 
+/* Banner (offline / errors) */
+#banner { background:#fef3c7; color:#92400e; border:1px solid #fcd34d; border-radius:9px; padding:10px 14px; margin-bottom:14px; font-size:0.85rem; display:flex; align-items:center; gap:10px; }
+#banner button { margin-left:auto; font-size:0.8rem; font-weight:600; padding:5px 12px; border:none; border-radius:7px; background:#92400e; color:#fff; cursor:pointer; }
+
+/* Settings */
+.set-card { background:var(--surface); border-radius:12px; padding:16px 18px; margin-bottom:14px; box-shadow:0 1px 3px rgba(0,0,0,0.06); max-width:460px; }
+.set-card h3 { font-size:0.95rem; margin-bottom:10px; }
+.set-card input { width:100%; font-size:0.9rem; padding:10px 12px; border:1px solid var(--border); border-radius:8px; margin-bottom:10px; }
+.set-card .muted { margin-bottom:12px; }
+.set-btn { font-size:0.85rem; font-weight:600; padding:9px 16px; border:none; border-radius:8px; background:var(--indigo); color:#fff; cursor:pointer; }
+.set-btn:disabled { opacity:0.6; }
+.set-msg { font-size:0.8rem; margin-top:10px; }
+
 @media (hover:none){ .btn{font-size:0.78rem; padding:8px 12px; min-height:40px;} .prompt-toggle{font-size:0.78rem;} }
 @media (max-width:640px){ .week-grid,.week-grid.has-weekend{grid-template-columns:1fr;} .day-col{min-height:auto;} }
 
@@ -219,10 +232,14 @@ input, select, textarea { color:var(--text); background:var(--surface); }
       <button data-sec="notes" onclick="showSection('notes')">Notes</button>
       <button data-sec="roster" onclick="showSection('roster')">Roster</button>
     </nav>
+    <button class="icon-btn" id="refreshBtn" title="Refresh data" onclick="manualRefresh()">↻</button>
     <button class="icon-btn" id="themeBtn" title="Toggle theme" onclick="toggleTheme()">🌙</button>
     <button class="icon-btn" title="Print weekly packet" onclick="window.print()">🖨</button>
+    <button class="icon-btn" title="Settings" onclick="showSection('settings')">⚙</button>
     <a href="#" class="signout" onclick="event.preventDefault(); signOut();">Sign out</a>
   </div>
+
+  <div id="banner" style="display:none"></div>
 
   <section id="sec-overview" class="section"></section>
   <section id="sec-today" class="section" style="display:none"></section>
@@ -287,6 +304,7 @@ input, select, textarea { color:var(--text); background:var(--surface); }
   <section id="sec-checklist" class="section" style="display:none"></section>
   <section id="sec-notes" class="section" style="display:none"></section>
   <section id="sec-roster" class="section" style="display:none"></section>
+  <section id="sec-settings" class="section" style="display:none"></section>
 </div>
 
 <script>
@@ -330,9 +348,20 @@ async function signIn(){ const email=document.getElementById('login-email').valu
   try{ const r=await fetch(`${SB_URL}/auth/v1/token?grant_type=password`,{method:'POST',headers:{apikey:SB_ANON,'Content-Type':'application/json'},body:JSON.stringify({email,password:pass})});
     const d=await r.json(); if(!r.ok||!d.access_token) throw new Error(d.error_description||d.msg||'Sign-in failed'); saveSession(d); showApp(); await loadData();
   }catch(e){ errEl.textContent=(e&&e.message)||'Sign-in failed'; errEl.style.display='block'; } finally{ btn.disabled=false; btn.textContent='Sign in'; } }
+let refreshTimer=null;
+function resetState(){ TASKS=[];STATUSES={};SCHEDULE=[];OBS=[];AGENDA=null;CHECKLIST=[];DONE=new Set();NOTES={slot:'main',body:''};ROSTER=[]; if(refreshTimer){clearInterval(refreshTimer);refreshTimer=null;} }
 function signOut(){ const s=getSession(); if(s&&s.access_token) fetch(`${SB_URL}/auth/v1/logout`,{method:'POST',headers:{apikey:SB_ANON,Authorization:'Bearer '+s.access_token}}).catch(()=>{});
-  clearSession(); TASKS=[];STATUSES={};SCHEDULE=[];OBS=[];AGENDA=null;CHECKLIST=[];DONE=new Set();NOTES={slot:'main',body:''};ROSTER=[]; showLogin(); }
-function showLogin(){ document.getElementById('login').style.display='flex'; document.getElementById('app').style.display='none'; document.getElementById('login-pass').value=''; }
+  clearSession(); resetState(); showLogin(); }
+function sessionExpired(){ clearSession(); resetState(); showLogin('Session expired — please sign in again.'); }
+function showLogin(reason){ document.getElementById('login').style.display='flex'; document.getElementById('app').style.display='none'; document.getElementById('login-pass').value='';
+  const e=document.getElementById('login-error'); if(reason){ e.textContent=reason; e.style.display='block'; } else { e.style.display='none'; } }
+
+// Offline banner + manual refresh + proactive token refresh
+function showBanner(msg,retry){ const b=document.getElementById('banner'); b.innerHTML=esc(msg)+(retry?' <button onclick="manualRefresh()">Retry</button>':''); b.style.display='flex'; }
+function hideBanner(){ const b=document.getElementById('banner'); if(b) b.style.display='none'; }
+async function manualRefresh(){ const b=document.getElementById('refreshBtn'); if(b){b.disabled=true;b.textContent='…';} await loadData(); if(b){b.disabled=false;b.textContent='↻';} }
+function startRefreshTimer(){ if(refreshTimer) return; refreshTimer=setInterval(refreshIfNeeded, 10*60*1000); }
+async function refreshIfNeeded(){ const s=getSession(); if(!s||!s.expires_at) return; if(s.expires_at < Math.floor(Date.now()/1000)+300) await refreshSession(); }
 function showApp(){ document.getElementById('login').style.display='none'; document.getElementById('app').style.display='block'; }
 
 // CRUD
@@ -351,7 +380,7 @@ async function loadData(){
       authFetch(`/rest/v1/jhan_notes?select=*&slot=eq.main`),
       authFetch(`/rest/v1/jhan_roster?select=*&order=sort`)
     ]);
-    if([tr,sr,scr,cir,nr,rr].some(r=>r.status===401)){ signOut(); return; }
+    if([tr,sr,scr,cir,nr,rr].some(r=>r.status===401)){ sessionExpired(); return; }
     const tasks=arr(await tr.json()), statuses=arr(await sr.json());
     TASKS=tasks.map(t=>({hash:t.hash,text:t.text,prompt:t.prompt,source:t.source,firstSeen:t.first_seen,
       email_from:t.email_from,email_subject:t.email_subject,email_received:t.email_received,email_body:t.email_body,email_link:t.email_link,
@@ -362,8 +391,9 @@ async function loadData(){
     const nrows=arr(await nr.json()); NOTES=nrows[0]||{slot:'main',body:''};
     ROSTER=arr(await rr.json());
     await loadWeekData();
-    renderBoard(); renderNotes(); renderRoster();
-  }catch(e){ const o=document.getElementById('sec-overview'); if(o) o.innerHTML='<div class="muted">Offline — could not load your data.</div>'; }
+    renderBoard(); renderNotes(); renderRoster(); renderSettings();
+    hideBanner(); startRefreshTimer();
+  }catch(e){ showBanner('⚠️ Couldn’t reach the server. Your last-loaded data is still shown.', true); }
 }
 async function loadWeekData(){
   const [obr,agr,cdr]=await Promise.all([
@@ -398,7 +428,7 @@ function statusOf(t){ const s=STATUSES[t.hash]; return (s==='completed'||s==='no
 function taskCounts(){ const c={todo:0,completed:0,notforme:0}; for(const t of TASKS) c[statusOf(t)]++; return c; }
 function clEsc(t){ return esc(t.length>70?t.slice(0,70)+'…':t); }
 
-const SECTIONS=['overview','today','board','week','obs','agenda','checklist','notes','roster'];
+const SECTIONS=['overview','today','board','week','obs','agenda','checklist','notes','roster','settings'];
 function showSection(name){ for(const s of SECTIONS) document.getElementById('sec-'+s).style.display=(s===name)?'':'none';
   document.querySelectorAll('.nav button').forEach(b=>b.classList.toggle('active', b.dataset.sec===name)); }
 function renderAll(){ renderOverview(); renderToday(); renderBoard(); renderWeek(); renderObs(); renderAgenda(); renderChecklist(); renderNotes(); renderRoster(); }
@@ -629,6 +659,48 @@ function renderRoster(){
 async function addRosterMember(){ const name=document.getElementById('rost-name').value.trim(); if(!name)return; const role=document.getElementById('rost-role').value.trim()||null; const m=await sbInsert('jhan_roster',{name,role,sort:(ROSTER.length+1)*10}); if(m){ ROSTER.push(m); renderRoster(); } }
 function updRoster(id,field,val){ const m=ROSTER.find(x=>x.id===id); if(m)m[field]=val; updateRosterDatalist(); sbUpdate('jhan_roster',`id=eq.${id}`,{[field]:val}); }
 function delRoster(id){ ROSTER=ROSTER.filter(m=>m.id!==id); renderRoster(); sbDelete('jhan_roster',`id=eq.${id}`); }
+
+// Settings (export + password)
+function renderSettings(){
+  document.getElementById('sec-settings').innerHTML=`
+    <div class="agenda-head">Settings</div>
+    <div class="set-card"><h3>🔑 Change password</h3>
+      <input id="pw-new" type="password" placeholder="New password (min 8 chars)" autocomplete="new-password">
+      <input id="pw-confirm" type="password" placeholder="Confirm new password" autocomplete="new-password">
+      <button class="set-btn" id="pwBtn" onclick="updatePassword()">Update password</button>
+      <div id="pw-msg" class="set-msg"></div>
+    </div>
+    <div class="set-card"><h3>⤓ Export your data</h3>
+      <p class="muted">Download a JSON backup of all your tasks, schedule, observations, agenda, duties, notes, and roster.</p>
+      <button class="set-btn" id="expBtn" onclick="exportData()">Download backup</button>
+    </div>`;
+}
+async function updatePassword(){
+  const p1=document.getElementById('pw-new').value, p2=document.getElementById('pw-confirm').value;
+  const msg=document.getElementById('pw-msg'), btn=document.getElementById('pwBtn');
+  if(p1.length<8){ msg.textContent='Password must be at least 8 characters.'; msg.style.color='#dc2626'; return; }
+  if(p1!==p2){ msg.textContent='Passwords don’t match.'; msg.style.color='#dc2626'; return; }
+  btn.disabled=true; msg.textContent='Updating…'; msg.style.color='';
+  try{
+    const r=await authFetch('/auth/v1/user',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:p1})});
+    if(r.ok){ msg.textContent='✓ Password updated.'; msg.style.color='#059669'; document.getElementById('pw-new').value=''; document.getElementById('pw-confirm').value=''; }
+    else { const d=await r.json().catch(()=>({})); msg.textContent='Error: '+(d.msg||d.error_description||('HTTP '+r.status)); msg.style.color='#dc2626'; }
+  }catch{ msg.textContent='Network error — try again.'; msg.style.color='#dc2626'; }
+  finally{ btn.disabled=false; }
+}
+async function exportData(){
+  const btn=document.getElementById('expBtn'); btn.disabled=true; btn.textContent='Exporting…';
+  const tables=['jhan_tasks','jhan_kanban_status','jhan_schedule','jhan_observations','jhan_agenda','jhan_checklist_items','jhan_checklist_done','jhan_notes','jhan_roster'];
+  const out={exported_at:new Date().toISOString()};
+  try{
+    for(const t of tables){ const r=await authFetch(`/rest/v1/${t}?select=*`); out[t]= r.ok? await r.json() : ('error '+r.status); }
+    const blob=new Blob([JSON.stringify(out,null,2)],{type:'application/json'});
+    const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`workflow-backup-${TODAY}.json`;
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+    btn.textContent='✓ Downloaded';
+  }catch{ btn.textContent='Failed — retry'; }
+  finally{ btn.disabled=false; setTimeout(()=>{btn.textContent='Download backup';},2000); }
+}
 
 // Init day picker
 (function(){ const sel=document.getElementById('sc-day'); if(sel) sel.innerHTML=[0,1,2,3,4,5,6].map(d=>`<option value="${d}" ${d===Math.min(todayWd(),4)?'selected':''}>${FULLDAY[d]}</option>`).join(''); })();
